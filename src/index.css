@@ -1,0 +1,343 @@
+/* Auth wrapper - pantalla completa con gradiente rojo/vinotinto */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #8B1538 0%, #C41E3A 50%, #A91D2E 100%);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Efectos decorativos de fondo */
+.auth-wrap::before {
+  content: '';
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  top: -250px;
+  left: -250px;
+  animation: float 6s ease-in-out infinite;
+}
+
+.auth-wrap::after {
+  content: '';
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  bottom: -200px;
+  right: -200px;
+  animation: float 8s ease-in-out infinite reverse;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+/* Tarjeta principal */
+.card {
+  width: 100%;
+  max-width: 440px;
+  background: white;
+  border-radius: 24px;
+  padding: 48px 40px;
+  box-shadow: 0 20px 60px rgba(139, 21, 56, 0.4);
+  position: relative;
+  z-index: 1;
+  animation: slideUp 0.5s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Brand section */
+.brand {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.logo-img {
+  width: 200px;
+  height: auto;
+  max-height: 120px;
+  object-fit: contain;
+  margin: 0 auto 20px;
+  display: block;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(139, 21, 56, 0.25);
+}
+
+.brand h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #8B1538 0%, #C41E3A 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-muted {
+  font-size: 0.95rem;
+  color: #666;
+  font-weight: 400;
+  margin: 0;
+}
+
+/* Mensaje de error */
+.error {
+  padding: 14px 18px;
+  background: #fee;
+  border: 1px solid #fcc;
+  border-radius: 12px;
+  color: #c00;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  animation: shake 0.4s ease;
+}
+
+.error::before {
+  content: '⚠️';
+  font-size: 1.2rem;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-10px); }
+  75% { transform: translateX(10px); }
+}
+
+/* Formulario */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Labels */
+label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: -12px;
+  display: block;
+}
+
+/* Inputs */
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+  width: 100%;
+  padding: 14px 18px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 1rem;
+  color: #1a1a1a;
+  transition: all 0.3s ease;
+  outline: none;
+  background: #fafafa;
+  font-family: inherit;
+}
+
+input::placeholder {
+  color: #9ca3af;
+}
+
+input:focus {
+  border-color: #C41E3A;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(196, 30, 58, 0.1);
+}
+
+/* Container de contraseña */
+.pass {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pass input {
+  width: 100%;
+  padding-right: 50px;
+}
+
+.pass-show {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+  user-select: none;
+}
+
+.pass-show:hover {
+  transform: scale(1.1);
+}
+
+.pass-show:active {
+  transform: scale(0.95);
+}
+
+/* Botón principal con colores MORAGSA */
+.btn-primary {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #8B1538 0%, #C41E3A 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 12px;
+  box-shadow: 0 4px 12px rgba(196, 30, 58, 0.4);
+  font-family: inherit;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(196, 30, 58, 0.5);
+  background: linear-gradient(135deg, #A91D2E 0%, #8B1538 100%);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Loading state */
+.btn-primary:disabled::after {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Texto centrado */
+.text-center {
+  text-align: center;
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.95rem;
+  color: #666;
+}
+
+.text-center a {
+  color: #C41E3A;
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 4px;
+  transition: color 0.3s ease;
+}
+
+.text-center a:hover {
+  color: #8B1538;
+  text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .card {
+    padding: 40px 28px;
+    border-radius: 20px;
+  }
+
+  .brand h2 {
+    font-size: 1.75rem;
+  }
+
+  .logo-img {
+    width: 180px;
+    max-height: 100px;
+  }
+}
+
+/* Accesibilidad - focus visible */
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 3px solid #C41E3A;
+  outline-offset: 2px;
+}
+
+/* Dark mode (opcional) */
+@media (prefers-color-scheme: dark) {
+  .card {
+    background: #1a1a1a;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+
+  .brand h2 {
+    -webkit-text-fill-color: unset;
+    background: linear-gradient(135deg, #C41E3A 0%, #8B1538 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-muted {
+    color: #a0a0a0;
+  }
+
+  label {
+    color: #d0d0d0;
+  }
+
+  input[type="email"],
+  input[type="password"],
+  input[type="text"] {
+    background: #2a2a2a;
+    border-color: #3a3a3a;
+    color: white;
+  }
+
+  input:focus {
+    background: #2a2a2a;
+    border-color: #C41E3A;
+  }
+
+  .text-center {
+    border-top-color: #3a3a3a;
+    color: #a0a0a0;
+  }
+}
