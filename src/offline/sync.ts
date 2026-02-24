@@ -1,74 +1,67 @@
-import { api } from '../api';
-import { 
-  getOutbox,
-  clearOutbox,
-  setMapping,
-  getMapping,
-  removeTaskLocal,
-  promoteLocalToServer,
-} from './db';
-
-let syncing = false;
-let _lastSyncAt = 0;
-
-export function getLastSyncAt() {
-  return _lastSyncAt;
-}
+import { api } from "../api";
+import {
+  getOutbox, clearOutbox, setMapping, getMapping,
+  removeTaskLocal, promoteLocalToServer
+} from "./db";
 
 export async function syncNow() {
-  if (syncing) return;
-  syncing = true;
+  if (!navigator.onLine) return;
 
-  try {
-    const ops = await getOutbox();
-    if (!ops.length) return;
+  const ops = (await getOutbox() as any[]).sort((a,b)=>a.ts-b.ts);
+  if (!ops.length) return;
 
-    const toSync: any[] = [];
-    for (const op of ops) {
-      if (op.op === "create") {
+  // Crea/Actualiza por bulksync (para items con clienteId)
+  const toSync: any[] = [];
+  for (const op of ops) {
+    if (op.op === "create") {
+      toSync.push({
+        clienteId: op.clienteId,
+        title: op.data.title,
+        description: op.data.description ?? "",
+        status: op.data.status ?? "Pendiente",
+      });
+    } else if (op.op === "update") {
+      const cid = op.clienteId;
+      if (cid) {
         toSync.push({
-          clientId: op.clientId,
+          clienteId: cid,
           title: op.data.title,
-          description: op.data.description ?? "",
+          description: op.data.description,
+          status: op.data.status,
         });
+      } else if (op.serverId) {
+        try { await api.put(`/tasks/${op.serverId}`, op.data); } catch {}
       }
     }
-
-    if (toSync.length > 0) {
-      const response = await api.post('/tasks/batch', { tasks: toSync });
-      const createdTasks = response.data;
-
-      for (const task of createdTasks) {
-        await promoteLocalToServer(task.clientId, task.id);
-        await setMapping(task.clientId, task.id);
-      }
-    }
-
-    for (const op of ops) {
-      if (op.op === "update") {
-        let serverId = op.id;
-        if (op.clientId) {
-          serverId = await getMapping(op.clientId) || op.id;
-        }
-        
-        await api.put(`/tasks/${serverId}`, op.data);
-      } else if (op.op === "delete") {
-        let serverId = op.id;
-        if (op.clientId) {
-          serverId = await getMapping(op.clientId) || op.id;
-        }
-        
-        await api.delete(`/tasks/${serverId}`);
-        await removeTaskLocal(op.clientId || op.id);
-      }
-    }
-
-    await clearOutbox();
-    _lastSyncAt = Date.now();
-
-  } catch (error) {
-    console.error('Error en sincronización:', error);
-  } finally {
-    syncing = false;
   }
+
+  // Ejecuta bulksync y PROMUEVE ids locales
+  if (toSync.length) {
+    try {
+      const { data } = await api.post("/tasks/bulksync", { tasks: toSync });
+      for (const map of data?.mapping || []) {
+        await setMapping(map.clienteId, map.serverId);
+        await promoteLocalToServer(map.clienteId, map.serverId); // <-- quita pending y cambia _id
+      }
+    } catch {
+      /* si falla, continuamos a deletes y salimos */
+    }
+  }
+
+  // Borra pendientes (necesita serverId)
+  for (const op of ops) {
+    if (op.op !== "delete") continue;
+    const serverId = op.serverId ?? (op.clienteId ? await getMapping(op.clienteId) : undefined);
+    if (!serverId) continue;
+    try { await api.delete(`/tasks/${serverId}`); await removeTaskLocal(op.clienteId || serverId); } catch {}
+  }
+
+  await clearOutbox();
+}
+
+// Suscripción a online/offline
+export function setupOnlineSync() {
+  const handler = () => { void syncNow(); };
+  window.addEventListener("online", handler);
+  return () => window.removeEventListener("online", handler);
 }

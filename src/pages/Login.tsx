@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type FormEvent, type ChangeEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
-import logo from "../assets/Logo.jpeg";
+import logo from "../assets/logo.jpeg";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,19 +12,23 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      const response = await api.post("/login", {
+      const response = await api.post("/auth/login", {
         email,
         password,
       });
 
       const { token } = response.data;
+
+      // Guardar token
+      localStorage.setItem("token", token);
       setAuth(token);
+
       navigate("/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.message || "Error al iniciar sesión");
@@ -38,7 +42,7 @@ export default function Login() {
       <div className="card">
         <div className="brand">
           <img src={logo} alt="Logo" className="logo-img" />
-          <h2>App Moragsa</h2>
+          <h2> Moragsa</h2>
           <p className="text-muted">
             Bienvenido, inicia sesión para continuar
           </p>
@@ -53,7 +57,9 @@ export default function Login() {
             type="email"
             placeholder="correo@dominio.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setEmail(e.target.value)
+            }
             required
           />
 
@@ -64,7 +70,9 @@ export default function Login() {
               type={show ? "text" : "password"}
               placeholder="Ingresa tu contraseña"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                setPassword(e.target.value)
+              }
               required
             />
             <button

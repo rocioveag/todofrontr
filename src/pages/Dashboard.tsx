@@ -1,251 +1,433 @@
-import React, { useState, useEffect } from 'react';
-import { 
-    Container, Box, Typography, TextField, Button, List, 
-    ListItem, ListItemText, ListItemSecondaryAction, IconButton, 
-    Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select 
-} from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import axios from 'axios';
-import { saveTask, getTasks, deleteTask } from '../utils/localDB';
-import { checkConnection, listenForReconnection } from '../utils/connectionStatus';
+import { useEffect, useMemo, useState } from "react";
+import './dashboard.css'
+import { api, setAuth } from "../api";
+import {
+  cacheTasks,
+  getAllTasksLocal,
+  putTaskLocal,
+  removeTaskLocal,
+  queue,
+  type OutboxOp,
+} from "../offline/db";
+import { syncNow, setupOnlineSync } from "../offline/sync";
 
-interface Task {
-    id: number;
-    title: string;
-    description?: string;
-    status: string;
-    pendingSync?: boolean;
-}
+type Status = "Pendiente" | "En Progreso" | "Completada";
 
-const Dashboard: React.FC = () => {
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [taskTitle, setTaskTitle] = useState('');
-    const [taskDescription, setTaskDescription] = useState('');
-    const [errorMessage, setErrorMessage] = useState('');
-    const [editTask, setEditTask] = useState<Task | null>(null);
-    const [open, setOpen] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
-
-    // Obtener tareas (Online y Offline)
-    const fetchTasks = async () => {
-        const offlineTasks = await getTasks();
-
-        if (checkConnection()) {
-            try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get('http://localhost:5000/api/tasks', {
-                    headers: { Authorization: token },
-                });
-
-                const syncedTaskIds = new Set(response.data.map((task: Task) => task.id));
-                const filteredOfflineTasks = offlineTasks.filter(task => !syncedTaskIds.has(task.id));
-
-                setTasks([...response.data, ...filteredOfflineTasks]);
-            } catch (error) {
-                setErrorMessage('Error al obtener las tareas.');
-            }
-        } else {
-            setTasks(offlineTasks);
-        }
-    };
-
-    // Agregar una tarea (Online y Offline)
-    const handleAddTask = async () => {
-        const newTask: Task = {
-            id: Date.now(),
-            title: taskTitle,
-            description: taskDescription,
-            status: 'Pendiente',
-            pendingSync: !checkConnection(),
-        };
-
-        if (checkConnection()) {
-            try {
-                const token = localStorage.getItem('token');
-                const response = await axios.post(
-                    'http://localhost:5000/api/tasks',
-                    { title: taskTitle, description: taskDescription, status: 'Pendiente' },
-                    { headers: { Authorization: token } }
-                );
-
-                setTasks(prev => [...prev, response.data]);
-                fetchTasks();
-            } catch (error) {
-                setErrorMessage('Error al agregar tarea.');
-            }
-        } else {
-            await saveTask(newTask);
-            setTasks(prev => [...prev, newTask]);
-        }
-
-        setTaskTitle('');
-        setTaskDescription('');
-    };
-
-    // Sincronizar tareas pendientes cuando hay conexión
-    const syncTasksWithServer = async () => {
-        const offlineTasks = await getTasks();
-        if (offlineTasks.length === 0) return;
-
-        const token = localStorage.getItem('token');
-
-        for (const task of offlineTasks) {
-            if (task.pendingSync) {
-                try {
-                    const response = await axios.post(
-                        'http://localhost:5000/api/tasks',
-                        { title: task.title, description: task.description, status: task.status },
-                        { headers: { Authorization: token } }
-                    );
-
-                    setTasks(prev => prev.map(t => (t.id === task.id ? response.data : t)));
-                    await deleteTask(task.id);
-                } catch (error) {
-                    console.error('Error sincronizando tarea:', error);
-                }
-            } else {
-                // Si la tarea fue editada sin conexión, actualizar en el servidor
-                try {
-                    const response = await axios.put(
-                        `http://localhost:5000/api/tasks/${task.id}`,
-                        { title: task.title, description: task.description, status: task.status },
-                        { headers: { Authorization: token } }
-                    );
-
-                    setTasks(prev => prev.map(t => (t.id === task.id ? response.data : t)));
-                    await deleteTask(task.id);
-                } catch (error) {
-                    console.error('Error sincronizando tarea editada:', error);
-                }
-            }
-        }
-
-        fetchTasks();
-    };
-
-    // Abrir diálogo de edición con la tarea seleccionada
-    const handleEditClick = (task: Task) => {
-        setEditTask(task);
-        setOpen(true);
-    };
-
-    // Editar una tarea (Online y Offline)
-    const handleUpdateTask = async () => {
-        if (!editTask) return;
-
-        if (checkConnection()) {
-            try {
-                const token = localStorage.getItem('token');
-                const response = await axios.put(
-                    `http://localhost:5000/api/tasks/${editTask.id}`,
-                    { title: editTask.title, description: editTask.description, status: editTask.status },
-                    { headers: { Authorization: token } }
-                );
-
-                setTasks(tasks.map(task => (task.id === editTask.id ? response.data : task)));
-            } catch (error) {
-                setErrorMessage('Error al actualizar tarea.');
-            }
-        } else {
-            // Guardar cambios en IndexedDB si no hay conexión
-            await saveTask({ ...editTask, pendingSync: true });
-            setTasks(prev => prev.map(task => (task.id === editTask.id ? { ...editTask, pendingSync: true } : task)));
-        }
-
-        setOpen(false);
-    };
-    
-    // Eliminar una tarea (Online y Offline)
-    const handleDeleteTask = (task: Task) => {
-        setTaskToDelete(task);
-        setDeleteDialogOpen(true);
-    };
-    const confirmDeleteTask = async () => {
-        if (!taskToDelete) return;
-
-        if (checkConnection()) {
-            try {
-                const token = localStorage.getItem('token');
-                await axios.delete(`http://localhost:5000/api/tasks/${taskToDelete.id}`, {
-                    headers: { Authorization: token },
-                });
-
-                setTasks(prev => prev.filter(task => task.id !== taskToDelete.id));
-            } catch (error) {
-                setErrorMessage('Error al eliminar tarea.');
-            }
-        } else {
-            await deleteTask(taskToDelete.id);
-            setTasks(prev => prev.filter(task => task.id !== taskToDelete.id));
-        }
-
-        setDeleteDialogOpen(false);
-    };
-
-    useEffect(() => {
-        fetchTasks();
-        listenForReconnection(syncTasksWithServer);
-    }, []);
-
-    return (
-        <Container maxWidth="md">
-            <Box sx={{ mt: 8, textAlign: 'center' }}>
-                <Typography variant="h4">Mis Tareas</Typography>
-
-                {/* Inputs para crear nueva tarea */}
-                <TextField fullWidth label="Nueva Tarea" variant="outlined" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
-                <TextField fullWidth label="Descripción" variant="outlined" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} sx={{ mt: 2 }} />
-                <Button variant="contained" color="primary" sx={{ mt: 2 }} onClick={handleAddTask} fullWidth>Agregar Tarea</Button>
-
-                <List sx={{ mt: 4 }}>
-                    {tasks.map(task => (
-                        <ListItem key={task.id} divider>
-                            <ListItemText
-                                primary={`${task.title} ${task.pendingSync ? '(Pendiente de sincronización)' : ''}`}
-                                secondary={`Estado: ${task.status} | Descripción: ${task.description || 'No especificada'}`}
-                            />
-                            <ListItemSecondaryAction>
-                                <IconButton edge="end" onClick={() => handleEditClick(task)}>
-                                    <EditIcon />
-                                </IconButton>
-                                <IconButton edge="end" onClick={() => handleDeleteTask(task)}>
-                                    <DeleteIcon />
-                                </IconButton>
-                            </ListItemSecondaryAction>
-                        </ListItem>
-                    ))}
-                </List>
-            </Box>
-            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-                <DialogTitle>¿Estás seguro de que deseas eliminar esta tarea?</DialogTitle>
-                <DialogActions>
-                    <Button onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
-                    <Button variant="contained" color="error" onClick={confirmDeleteTask}>
-                        Eliminar
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* MODAL DE EDICIÓN */}
-            <Dialog open={open} onClose={() => setOpen(false)}>
-                <DialogTitle>Editar Tarea</DialogTitle>
-                <DialogContent>
-                    <TextField fullWidth label="Título" value={editTask?.title || ''} onChange={(e) => setEditTask(prev => prev ? { ...prev, title: e.target.value } : null)} />
-                    <TextField fullWidth label="Descripción" value={editTask?.description || ''} onChange={(e) => setEditTask(prev => prev ? { ...prev, description: e.target.value } : null)} sx={{ mt: 2 }} />
-                    <Select fullWidth value={editTask?.status || 'Pendiente'} onChange={(e) => setEditTask(prev => prev ? { ...prev, status: e.target.value } : null)} sx={{ mt: 2 }}>
-                        <MenuItem value="Pendiente">Pendiente</MenuItem>
-                        <MenuItem value="En Progreso">En Progreso</MenuItem>
-                        <MenuItem value="Completado">Completado</MenuItem>
-                    </Select>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpen(false)}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleUpdateTask}>Guardar Cambios</Button>
-                </DialogActions>
-            </Dialog>
-        </Container>
-    );
+type Task = {
+  _id: string;
+  title: string;
+  description?: string;
+  status: Status;
+  clienteId?: string;
+  createdAt?: string;
+  deleted?: boolean;
+  pending?: boolean;
 };
 
-export default Dashboard;
+const isLocalId = (id: string) => !/^[a-f0-9]{24}$/i.test(id);
+
+function normalizeTask(x: any): Task {
+  return {
+    _id: String(x?._id ?? x?.id),
+    title: String(x?.title ?? "(sin título)"),
+    description: x?.description ?? "",
+    status:
+      x?.status === "Completada" ||
+      x?.status === "En Progreso" ||
+      x?.status === "Pendiente"
+        ? x.status
+        : "Pendiente",
+    clienteId: x?.clienteId,
+    createdAt: x?.createdAt,
+    deleted: !!x?.deleted,
+    pending: !!x?.pending,
+  };
+}
+
+export default function Dashboard() {
+  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [editingDescription, setEditingDescription] = useState("");
+  const [online, setOnline] = useState<boolean>(navigator.onLine);
+
+  useEffect(() => {
+    setAuth(localStorage.getItem("token"));
+
+    const unsubscribe = setupOnlineSync();
+
+    const on = async () => {
+      setOnline(true);
+      await syncNow();
+      await loadFromServer();
+    };
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+
+    (async () => {
+      const local = await getAllTasksLocal();
+      if (local?.length) setTasks(local.map(normalizeTask));
+
+      await loadFromServer();
+      await syncNow();
+      await loadFromServer();
+    })();
+
+    return () => {
+      unsubscribe?.();
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
+  async function loadFromServer() {
+    try {
+      const { data } = await api.get("/tasks");
+      const raw = Array.isArray(data?.items) ? data.items : [];
+      const list = raw.map(normalizeTask);
+      setTasks(list);
+      await cacheTasks(list);
+    } catch {
+      // si falla, nos quedamos con lo local
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addTask(e: React.FormEvent) {
+    e.preventDefault();
+    const t = title.trim();
+    const d = description.trim();
+    if (!t) return;
+
+    const clienteId = crypto.randomUUID();
+    const localTask = normalizeTask({
+      _id: clienteId,
+      title: t,
+      description: d,
+      status: "Pendiente" as Status,
+      pending: !navigator.onLine,
+    });
+
+    setTasks((prev) => [localTask, ...prev]);
+    await putTaskLocal(localTask);
+    setTitle("");
+    setDescription("");
+
+    if (!navigator.onLine) {
+      const op: OutboxOp = {
+        id: "op-" + clienteId,
+        op: "create",
+        clienteId,
+        data: localTask,
+        ts: Date.now(),
+      };
+      await queue(op);
+      return;
+    }
+
+    try {
+      const { data } = await api.post("/tasks", { title: t, description: d });
+      const created = normalizeTask(data?.task ?? data);
+      setTasks((prev) => prev.map((x) => (x._id === clienteId ? created : x)));
+      await putTaskLocal(created);
+    } catch {
+      const op: OutboxOp = {
+        id: "op-" + clienteId,
+        op: "create",
+        clienteId,
+        data: localTask,
+        ts: Date.now(),
+      };
+      await queue(op);
+    }
+  }
+
+  function startEdit(task: Task) {
+    setEditingId(task._id);
+    setEditingTitle(task.title);
+    setEditingDescription(task.description ?? "");
+  }
+
+  async function saveEdit(taskId: string) {
+    const newTitle = editingTitle.trim();
+    const newDesc  = editingDescription.trim();
+    if (!newTitle) return;
+
+    const before = tasks.find((t) => t._id === taskId);
+    const patched = { ...before, title: newTitle, description: newDesc } as Task;
+
+    setTasks((prev) => prev.map((t) => (t._id === taskId ? patched : t)));
+    await putTaskLocal(patched);
+    setEditingId(null);
+
+    if (!navigator.onLine) {
+      await queue({
+        id: "upd-" + taskId,
+        op: "update",
+        clienteId: isLocalId(taskId) ? taskId : undefined,
+        serverId: isLocalId(taskId) ? undefined : taskId,
+        data: { title: newTitle, description: newDesc },
+        ts: Date.now(),
+      } as OutboxOp);
+      return;
+    }
+
+    try {
+      await api.put(`/tasks/${taskId}`, { title: newTitle, description: newDesc });
+    } catch {
+      await queue({
+        id: "upd-" + taskId,
+        op: "update",
+        serverId: taskId,
+        data: { title: newTitle, description: newDesc },
+        ts: Date.now(),
+      } as OutboxOp);
+    }
+  }
+
+  async function handleStatusChange(task: Task, newStatus: Status) {
+    const updated = { ...task, status: newStatus };
+    setTasks((prev) => prev.map((x) => (x._id === task._id ? updated : x)));
+    await putTaskLocal(updated);
+
+    if (!navigator.onLine) {
+      await queue({
+        id: "upd-" + task._id,
+        op: "update",
+        serverId: isLocalId(task._id) ? undefined : task._id,
+        clienteId: isLocalId(task._id) ? task._id : undefined,
+        data: { status: newStatus },
+        ts: Date.now(),
+      });
+      return;
+    }
+
+    try {
+      await api.put(`/tasks/${task._id}`, { status: newStatus });
+    } catch {
+      await queue({
+        id: "upd-" + task._id,
+        op: "update",
+        serverId: task._id,
+        data: { status: newStatus },
+        ts: Date.now(),
+      });
+    }
+  }
+
+  async function removeTask(taskId: string) {
+    const backup = tasks;
+    setTasks((prev) => prev.filter((t) => t._id !== taskId));
+    await removeTaskLocal(taskId);
+
+    if (!navigator.onLine) {
+      await queue({ id: "del-" + taskId, op: "delete", serverId: isLocalId(taskId) ? undefined : taskId, clienteId: isLocalId(taskId) ? taskId : undefined, ts: Date.now() });
+      return;
+    }
+
+    try {
+      await api.delete(`/tasks/${taskId}`);
+    } catch {
+      setTasks(backup);
+      for (const t of backup) await putTaskLocal(t);
+      await queue({ id: "del-" + taskId, op: "delete", serverId: taskId, clienteId: isLocalId(taskId) ? taskId : undefined, ts: Date.now() });
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem("token");
+    setAuth(null);
+    window.location.href = "/";
+  }
+
+  const filtered = useMemo(() => {
+    let list = tasks;
+    if (search.trim()) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (t) =>
+          (t.title || "").toLowerCase().includes(s) ||
+          (t.description || "").toLowerCase().includes(s)
+      );
+    }
+    if (filter === "active") list = list.filter((t) => t.status !== "Completada");
+    if (filter === "completed") list = list.filter((t) => t.status === "Completada");
+    return list;
+  }, [tasks, search, filter]);
+
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const done = tasks.filter((t) => t.status === "Completada").length;
+    return { total, done, pending: total - done };
+  }, [tasks]);
+
+  return (
+    <div className="wrap">
+      <header className="topbar">
+        <h1>Moragsa</h1>
+        <div className="spacer" />
+        <div className="stats">
+          <span>Total: {stats.total}</span>
+          <span>Hechas: {stats.done}</span>
+          <span>Pendientes: {stats.pending}</span>
+
+          {/* ===== INDICADOR DE CONEXIÓN ===== */}
+          <span
+            className="badge"
+            style={{
+              marginLeft: 8,
+              background: online ? "#16a34a" : "#dc2626",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <span
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: "#fff",
+                display: "inline-block",
+                boxShadow: online ? "0 0 6px #4ade80" : "0 0 6px #f87171",
+                animation: online ? "pulse 1.5s infinite" : "none",
+              }}
+            />
+            {online ? "En línea" : "Sin conexión"}
+          </span>
+        </div>
+        <button className="btn danger" onClick={logout}>Salir</button>
+      </header>
+
+      <main>
+        {/* ===== Crear ===== */}
+        <form className="add add-grid" onSubmit={addTask}>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Título de la tarea…"
+          />
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Descripción (opcional)…"
+            rows={2}
+          />
+          <button className="btn">Agregar</button>
+        </form>
+
+        {/* ===== Toolbar ===== */}
+        <div className="toolbar">
+          <input
+            className="search"
+            placeholder="Buscar por título o descripción…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="filters">
+            <button
+              className={filter === "all" ? "chip active" : "chip"}
+              onClick={() => setFilter("all")}
+              type="button"
+            >
+              Todas
+            </button>
+            <button
+              className={filter === "active" ? "chip active" : "chip"}
+              onClick={() => setFilter("active")}
+              type="button"
+            >
+              Activas
+            </button>
+            <button
+              className={filter === "completed" ? "chip active" : "chip"}
+              onClick={() => setFilter("completed")}
+              type="button"
+            >
+              Hechas
+            </button>
+          </div>
+        </div>
+
+        {/* ===== Lista ===== */}
+        {loading ? (
+          <p>Cargando…</p>
+        ) : filtered.length === 0 ? (
+          <p className="empty">Sin tareas</p>
+        ) : (
+          <ul className="list">
+            {filtered.map((t) => (
+              <li key={t._id} className={t.status === "Completada" ? "item done" : "item"}>
+                <select
+                  value={t.status}
+                  onChange={(e) => handleStatusChange(t, e.target.value as Status)}
+                  className="status-select"
+                  title="Estado"
+                >
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="En Progreso">En Progreso</option>
+                  <option value="Completada">Completada</option>
+                </select>
+
+                <div className="content">
+                  {editingId === t._id ? (
+                    <>
+                      <input
+                        className="edit"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        placeholder="Título"
+                        autoFocus
+                      />
+                      <textarea
+                        className="edit"
+                        value={editingDescription}
+                        onChange={(e) => setEditingDescription(e.target.value)}
+                        placeholder="Descripción"
+                        rows={2}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <span className="title" onDoubleClick={() => startEdit(t)}>
+                        {t.title}
+                      </span>
+                      {t.description && <p className="desc">{t.description}</p>}
+                      {(t.pending || isLocalId(t._id)) && (
+                        <span
+                          className="badge"
+                          title="Aún no sincronizada"
+                          style={{ background: "#b45309", width: "fit-content" }}
+                        >
+                          Falta sincronizar
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="actions">
+                  {editingId === t._id ? (
+                    <button className="btn" onClick={() => saveEdit(t._id)}>Guardar</button>
+                  ) : (
+                    <button className="icon" title="Editar" onClick={() => startEdit(t)}>✏️</button>
+                  )}
+                  <button className="icon danger" title="Eliminar" onClick={() => removeTask(t._id)}>
+                    🗑️
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </div>
+  );
+}
