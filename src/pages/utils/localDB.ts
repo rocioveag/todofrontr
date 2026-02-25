@@ -11,21 +11,17 @@ export const dbPromise = openDB(DB_NAME, 1, {
     },
 });
 
-//guardar una tarea en la base de datos local
-export async function saveTask(task){
+export async function saveTask(task: any) {
     const db = await dbPromise;
     return db.put(STORE_NAME, task);
 }
 
-//Obtener todas las tareas de la base de datos local
-export async function getTasks(){
+export async function getTasks() {
     const db = await dbPromise;
     return db.getAll(STORE_NAME);
 }
 
-//Eliminar una tarea de la base de datos local
-export async function deleteTask(id){
+export async function deleteTask(id: any) {
     const db = await dbPromise;
-    // continúa fuera de pantalla...
     return db.delete(STORE_NAME, id);
 }
