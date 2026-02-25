@@ -1,10 +1,9 @@
-import { getDB } from "../offline/db";
+import { db } from "../offline/db";
 export async function cacheTasks(list: any[]) {
-  const db = await getDB();
-  const tx = db.transaction("tasks", "readwrite");
+  const d = await db();
+  const tx = d.transaction("tasks", "readwrite");
   const store = tx.objectStore("tasks");
-  
-  await store.clear(); 
+  await store.clear();
   for (const task of list) {
     await store.put(task);
   }
@@ -12,29 +11,27 @@ export async function cacheTasks(list: any[]) {
 }
 
 export async function putTaskLocal(task: any) {
-  const db = await getDB();
-  await db.put("tasks", task);
+  const d = await db();
+  await d.put("tasks", task);
 }
 
 export async function getAllTasksLocal() {
-  const db = await getDB();
-  const tasks = await db.getAll("tasks");
-  return tasks || [];
+  const d = await db();
+  return (await d.getAll("tasks")) || [];
 }
 
 export async function removeTaskLocal(id: string) {
-  const db = await getDB();
-  await db.delete("tasks", id);
+  const d = await db();
+  await d.delete("tasks", id);
 }
 
 export async function promoteLocalToServer(clientId: string, serverId: string) {
-  const db = await getDB();
-  const task = await db.get("tasks", clientId);
-  
+  const d = await db();
+  const task = await d.get("tasks", clientId);
   if (task) {
-    await db.delete("tasks", clientId);
+    await d.delete("tasks", clientId);
     task.id = serverId;
     task.pending = false;
-    await db.put("tasks", task);
+    await d.put("tasks", task);
   }
 }

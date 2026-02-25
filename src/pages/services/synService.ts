@@ -9,8 +9,8 @@ if (!navigator.onLine) return;
 
     for (const task of unsyncedTasks) {
         try {
-            const response = await axios.post(
-                'http://localhost:5000/api/tasks',
+await axios.post(
+                    'http://localhost:5000/api/tasks',
                 task,
                 {
                     headers: {
