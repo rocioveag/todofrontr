@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import './dashboard.css'
 import { api, setAuth } from "../api";
 import {
@@ -45,6 +46,8 @@ function normalizeTask(x: any): Task {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate(); // ✅ Aquí arriba, donde corresponde
+
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
@@ -56,6 +59,25 @@ export default function Dashboard() {
   const [editingDescription, setEditingDescription] = useState("");
   const [online, setOnline] = useState<boolean>(navigator.onLine);
 
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const SESSION_TIME = 10000; // 10s de prueba
+
+  // ✅ Dos funciones independientes, al mismo nivel
+function logoutUser() {
+  localStorage.removeItem("token");
+  setAuth(null);
+  navigate("/");
+}
+
+async function logoutAllDevices() {
+  try {
+    await api.post("/auth/logout-all");
+  } finally {
+    logoutUser();
+  }
+}
+
+  // 🔹 EFECTO 1 - Inicialización y Sync
   useEffect(() => {
     setAuth(localStorage.getItem("token"));
 
@@ -66,7 +88,9 @@ export default function Dashboard() {
       await syncNow();
       await loadFromServer();
     };
+
     const off = () => setOnline(false);
+
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
 
@@ -85,6 +109,29 @@ export default function Dashboard() {
       window.removeEventListener("offline", off);
     };
   }, []);
+
+  // 🔹 EFECTO 2 - Auto logout por inactividad
+  useEffect(() => {
+    const resetTimer = () => {
+      if (inactivityTimer.current) {
+        clearTimeout(inactivityTimer.current);
+      }
+      inactivityTimer.current = setTimeout(() => {
+        logoutUser();
+      }, SESSION_TIME);
+    };
+
+    const events = ["mousemove", "keydown", "click", "scroll"];
+    events.forEach((event) => window.addEventListener(event, resetTimer));
+    resetTimer();
+
+    return () => {
+      if (inactivityTimer.current) {
+        clearTimeout(inactivityTimer.current);
+      }
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, []); // ✅ logoutUser es estable porque usa navigate del hook
 
   async function loadFromServer() {
     try {
@@ -241,12 +288,6 @@ export default function Dashboard() {
     }
   }
 
-  function logout() {
-    localStorage.removeItem("token");
-    setAuth(null);
-    window.location.href = "/";
-  }
-
   const filtered = useMemo(() => {
     let list = tasks;
     if (search.trim()) {
@@ -278,7 +319,6 @@ export default function Dashboard() {
           <span>Hechas: {stats.done}</span>
           <span>Pendientes: {stats.pending}</span>
 
-          {/* ===== INDICADOR DE CONEXIÓN ===== */}
           <span
             className="badge"
             style={{
@@ -303,11 +343,10 @@ export default function Dashboard() {
             {online ? "En línea" : "Sin conexión"}
           </span>
         </div>
-        <button className="btn danger" onClick={logout}>Salir</button>
-      </header>
+<button className="btn danger" onClick={logoutUser}>Salir</button>
+<button className="btn danger" onClick={logoutAllDevices}>Cerrar todas las sesiones</button>      </header>
 
       <main>
-        {/* ===== Crear ===== */}
         <form className="add add-grid" onSubmit={addTask}>
           <input
             value={title}
@@ -323,7 +362,6 @@ export default function Dashboard() {
           <button className="btn">Agregar</button>
         </form>
 
-        {/* ===== Toolbar ===== */}
         <div className="toolbar">
           <input
             className="search"
@@ -332,31 +370,12 @@ export default function Dashboard() {
             onChange={(e) => setSearch(e.target.value)}
           />
           <div className="filters">
-            <button
-              className={filter === "all" ? "chip active" : "chip"}
-              onClick={() => setFilter("all")}
-              type="button"
-            >
-              Todas
-            </button>
-            <button
-              className={filter === "active" ? "chip active" : "chip"}
-              onClick={() => setFilter("active")}
-              type="button"
-            >
-              Activas
-            </button>
-            <button
-              className={filter === "completed" ? "chip active" : "chip"}
-              onClick={() => setFilter("completed")}
-              type="button"
-            >
-              Hechas
-            </button>
+            <button className={filter === "all" ? "chip active" : "chip"} onClick={() => setFilter("all")} type="button">Todas</button>
+            <button className={filter === "active" ? "chip active" : "chip"} onClick={() => setFilter("active")} type="button">Activas</button>
+            <button className={filter === "completed" ? "chip active" : "chip"} onClick={() => setFilter("completed")} type="button">Hechas</button>
           </div>
         </div>
 
-        {/* ===== Lista ===== */}
         {loading ? (
           <p>Cargando…</p>
         ) : filtered.length === 0 ? (
@@ -379,33 +398,15 @@ export default function Dashboard() {
                 <div className="content">
                   {editingId === t._id ? (
                     <>
-                      <input
-                        className="edit"
-                        value={editingTitle}
-                        onChange={(e) => setEditingTitle(e.target.value)}
-                        placeholder="Título"
-                        autoFocus
-                      />
-                      <textarea
-                        className="edit"
-                        value={editingDescription}
-                        onChange={(e) => setEditingDescription(e.target.value)}
-                        placeholder="Descripción"
-                        rows={2}
-                      />
+                      <input className="edit" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} placeholder="Título" autoFocus />
+                      <textarea className="edit" value={editingDescription} onChange={(e) => setEditingDescription(e.target.value)} placeholder="Descripción" rows={2} />
                     </>
                   ) : (
                     <>
-                      <span className="title" onDoubleClick={() => startEdit(t)}>
-                        {t.title}
-                      </span>
+                      <span className="title" onDoubleClick={() => startEdit(t)}>{t.title}</span>
                       {t.description && <p className="desc">{t.description}</p>}
                       {(t.pending || isLocalId(t._id)) && (
-                        <span
-                          className="badge"
-                          title="Aún no sincronizada"
-                          style={{ background: "#b45309", width: "fit-content" }}
-                        >
+                        <span className="badge" title="Aún no sincronizada" style={{ background: "#b45309", width: "fit-content" }}>
                           Falta sincronizar
                         </span>
                       )}
@@ -419,9 +420,7 @@ export default function Dashboard() {
                   ) : (
                     <button className="icon" title="Editar" onClick={() => startEdit(t)}>✏️</button>
                   )}
-                  <button className="icon danger" title="Eliminar" onClick={() => removeTask(t._id)}>
-                    🗑️
-                  </button>
+                  <button className="icon danger" title="Eliminar" onClick={() => removeTask(t._id)}>🗑️</button>
                 </div>
               </li>
             ))}
