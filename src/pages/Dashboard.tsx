@@ -60,7 +60,7 @@ export default function Dashboard() {
   const [online, setOnline] = useState<boolean>(navigator.onLine);
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const SESSION_TIME = 10000; // 10s de prueba
+  const SESSION_TIME = 180000; // 10s de prueba
 
   // ✅ Dos funciones independientes, al mismo nivel
 function logoutUser() {
@@ -141,6 +141,7 @@ async function logoutAllDevices() {
       setTasks(list);
       await cacheTasks(list);
     } catch {
+      // si falla, nos quedamos con lo local
     } finally {
       setLoading(false);
     }

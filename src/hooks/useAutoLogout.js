@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-const TIMEOUT = 100000; 
+const TIMEOUT = 180000;  // 3 minutos
 export const useAutoLogout = (logout) => {
   const navigate = useNavigate();
   const timer = useRef(null);
