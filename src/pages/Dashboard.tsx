@@ -141,7 +141,6 @@ async function logoutAllDevices() {
       setTasks(list);
       await cacheTasks(list);
     } catch {
-      // si falla, nos quedamos con lo local
     } finally {
       setLoading(false);
     }
