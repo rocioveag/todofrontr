@@ -10,7 +10,7 @@ export async function syncNow() {
   const ops = (await getOutbox() as any[]).sort((a,b)=>a.ts-b.ts);
   if (!ops.length) return;
 
-  let syncFailed = false; // 👈 bandera de error
+  let syncFailed = false;
 
   const toSync: any[] = [];
   for (const op of ops) {
@@ -44,7 +44,7 @@ export async function syncNow() {
         await promoteLocalToServer(map.clienteId, map.serverId);
       }
     } catch {
-      syncFailed = true; // 👈 marca que falló, no limpies el outbox
+      syncFailed = true;
     }
   }
 
@@ -55,5 +55,12 @@ export async function syncNow() {
     try { await api.delete(`/tasks/${serverId}`); await removeTaskLocal(op.clienteId || serverId); } catch {}
   }
 
-  if (!syncFailed) await clearOutbox(); // 👈 solo limpia si todo salió bien
+  if (!syncFailed) await clearOutbox();
+} // 👈 aquí cierra syncNow
+
+// 👇 setupOnlineSync FUERA de syncNow
+export function setupOnlineSync() {
+  const handler = () => { void syncNow(); };
+  window.addEventListener("online", handler);
+  return () => window.removeEventListener("online", handler);
 }
