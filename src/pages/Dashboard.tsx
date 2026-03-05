@@ -78,7 +78,7 @@ async function logoutAllDevices() {
 }
 
   // 🔹 EFECTO 1 - Inicialización y Sync
-  useEffect(() => {
+useEffect(() => {
     setAuth(localStorage.getItem("token"));
 
     const unsubscribe = setupOnlineSync();
@@ -103,8 +103,18 @@ async function logoutAllDevices() {
       await loadFromServer();
     })();
 
+    // 🔹 Verifica sesión cada 30 segundos
+    const sessionCheck = setInterval(async () => {
+      try {
+        await api.get("/auth/profile");
+      } catch {
+        // El interceptor en api.ts maneja el 401 automáticamente
+      }
+    }, 30000);
+
     return () => {
       unsubscribe?.();
+      clearInterval(sessionCheck);
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
     };
