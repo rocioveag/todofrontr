@@ -81,8 +81,9 @@ async function logoutAllDevices() {
 useEffect(() => {
     setAuth(localStorage.getItem("token"));
 
-    const unsubscribe = setupOnlineSync();
-
+const unsubscribe = setupOnlineSync(async () => {
+  await loadFromServer();
+});
     const on = async () => {
       setOnline(true);
       await syncNow();

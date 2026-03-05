@@ -56,11 +56,15 @@ export async function syncNow() {
   }
 
   if (!syncFailed) await clearOutbox();
-} // 👈 aquí cierra syncNow
+}
 
-// 👇 setupOnlineSync FUERA de syncNow
-export function setupOnlineSync() {
-  const handler = () => { void syncNow(); };
+
+export function setupOnlineSync(onSynced?: () => void) {
+  const handler = async () => { 
+    await syncNow(); 
+    onSynced?.();
+  };
   window.addEventListener("online", handler);
   return () => window.removeEventListener("online", handler);
+
 }
