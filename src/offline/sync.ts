@@ -10,7 +10,8 @@ export async function syncNow() {
   const ops = (await getOutbox() as any[]).sort((a,b)=>a.ts-b.ts);
   if (!ops.length) return;
 
-  // Crea/Actualiza por bulksync (para items con clienteId)
+  let syncFailed = false; // 👈 bandera de error
+
   const toSync: any[] = [];
   for (const op of ops) {
     if (op.op === "create") {
@@ -35,20 +36,18 @@ export async function syncNow() {
     }
   }
 
-  // Ejecuta bulksync y PROMUEVE ids locales
   if (toSync.length) {
     try {
       const { data } = await api.post("/tasks/bulksync", { tasks: toSync });
       for (const map of data?.mapping || []) {
         await setMapping(map.clienteId, map.serverId);
-        await promoteLocalToServer(map.clienteId, map.serverId); // <-- quita pending y cambia _id
+        await promoteLocalToServer(map.clienteId, map.serverId);
       }
     } catch {
-      /* si falla, continuamos a deletes y salimos */
+      syncFailed = true; // 👈 marca que falló, no limpies el outbox
     }
   }
 
-  // Borra pendientes (necesita serverId)
   for (const op of ops) {
     if (op.op !== "delete") continue;
     const serverId = op.serverId ?? (op.clienteId ? await getMapping(op.clienteId) : undefined);
@@ -56,12 +55,5 @@ export async function syncNow() {
     try { await api.delete(`/tasks/${serverId}`); await removeTaskLocal(op.clienteId || serverId); } catch {}
   }
 
-  await clearOutbox();
-}
-
-// Suscripción a online/offline
-export function setupOnlineSync() {
-  const handler = () => { void syncNow(); };
-  window.addEventListener("online", handler);
-  return () => window.removeEventListener("online", handler);
+  if (!syncFailed) await clearOutbox(); // 👈 solo limpia si todo salió bien
 }
