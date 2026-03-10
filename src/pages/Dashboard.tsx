@@ -60,9 +60,9 @@ export default function Dashboard() {
   const [online, setOnline] = useState<boolean>(navigator.onLine);
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const SESSION_TIME = 180000; // 10s de prueba
+  const SESSION_TIME = 180000; 
 
-  // ✅ Dos funciones independientes, al mismo nivel
+  //  Dos funciones independientes, al mismo nivel
 function logoutUser() {
   localStorage.removeItem("token");
   setAuth(null);
@@ -77,7 +77,7 @@ async function logoutAllDevices() {
   }
 }
 
-  // 🔹 EFECTO 1 - Inicialización y Sync
+  //  EFECTO 1 - Inicialización y Sync
 useEffect(() => {
     setAuth(localStorage.getItem("token"));
 
@@ -95,16 +95,14 @@ const unsubscribe = setupOnlineSync(async () => {
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
 
-    (async () => {
-      const local = await getAllTasksLocal();
-      if (local?.length) setTasks(local.map(normalizeTask));
+   (async () => {
+  const local = await getAllTasksLocal();
+  if (local?.length) setTasks(local.map(normalizeTask));
 
-      await loadFromServer();
-      await syncNow();
-      await loadFromServer();
-    })();
-
-    // 🔹 Verifica sesión cada 30 segundos
+  await syncNow();
+  await loadFromServer();
+})();
+    //  Verifica sesión cada 30 segundos
     const sessionCheck = setInterval(async () => {
       try {
         await api.get("/auth/profile");
@@ -121,7 +119,7 @@ const unsubscribe = setupOnlineSync(async () => {
     };
   }, []);
 
-  // 🔹 EFECTO 2 - Auto logout por inactividad
+  //  EFECTO 2 - Auto logout por inactividad
   useEffect(() => {
     const resetTimer = () => {
       if (inactivityTimer.current) {
@@ -142,7 +140,7 @@ const unsubscribe = setupOnlineSync(async () => {
       }
       events.forEach((event) => window.removeEventListener(event, resetTimer));
     };
-  }, []); // ✅ logoutUser es estable porque usa navigate del hook
+  }, []); // logoutUser es estable porque usa navigate del hook
 
   async function loadFromServer() {
     try {
